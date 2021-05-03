@@ -1,0 +1,919 @@
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Cgo in practice</title>
+    <meta charset='utf-8'>
+    <script src='static/slides.js'></script>
+  </head>
+
+  <body style='display: none'>
+
+    <section class='slides layout-widescreen'>
+      
+      <article>
+        <h1>Cgo in practice</h1>
+        <h3>Lightning talk at Ljubljana Golang Meetup: Goodbye Summer!</h3>
+        <h3>28 September 2017</h3>
+        
+          <div class="presenter">
+            
+  
+  <p>
+    Damjan Cvetko
+  </p>
+  
+
+  
+  <p>
+    Monotek d.o.o.
+  </p>
+  
+
+          </div>
+        
+      </article>
+      
+  
+  
+      <article>
+      
+        <h3>What is Cgo?</h3>
+        
+  
+  <p>
+    Cgo lets Go packages call C code.
+  </p>
+  
+
+  
+  <p>
+    Given a Go source file written with some special features, cgo outputs Go and C files that can be combined into a single Go package.
+  </p>
+  
+
+  
+  <p>
+    From <a href="https://blog.golang.org/c-go-cgo" target="_blank">blog.golang.org/c-go-cgo</a>
+  </p>
+  
+
+      
+      <div class="pagenumber">[1]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Why Cgo?</h3>
+        
+  <ul>
+  
+    <li>Too much code is already written. Reuse is critical.</li>
+  
+  </ul>
+
+  <ul>
+  
+    <li>Can&#39;t just port everything over night... Rome wasn&#39;t built in a day.</li>
+  
+  </ul>
+
+  <ul>
+  
+    <li>Isn&#39;t a Go program a binary executable? Why doesn&#39;t it just work?</li>
+  
+  </ul>
+
+  <ul>
+  
+    <li>Go != C</li>
+  
+  </ul>
+
+      
+      <div class="pagenumber">[2]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Structure of Cgo file</h3>
+        
+  
+  <p>
+    1. Ordinary <code>.go</code> file
+  </p>
+  
+
+  
+  <p>
+    2. In comments add needed <code>#include</code> and <code>C</code> code
+  </p>
+  
+
+  
+  <p>
+    3. Add <code>import</code> <code>&#34;C&#34;</code> directly after comment
+  </p>
+  
+
+  
+  <p>
+    4. In go functions use pseudo package <code>C</code> to access C functions
+  </p>
+  
+
+  
+  <p>
+    5. <code>go</code> <code>build</code>
+  </p>
+  
+
+      
+      <div class="pagenumber">[3]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Hello World</h2>
+      
+      <div class="pagenumber">[4]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cgo example 1</h3>
+        
+  <div class="code" contenteditable="true" spellcheck="false">
+
+
+<pre><span num="1">package main</span>
+<span num="2"></span>
+<span num="3">/*</span>
+<span num="4"></span>
+<span num="5">#include &lt;stdio.h&gt;</span>
+<span num="6"></span>
+<span num="7">void test1(char *text)</span>
+<span num="8">{</span>
+<span num="9">    printf(&#34;Native write: %s\n&#34;, text);</span>
+<span num="10">}</span>
+<span num="11"></span>
+<span num="12">*/</span>
+<span num="13">import &#34;C&#34;</span>
+<span num="14"></span>
+<span num="15">func main() {</span>
+<span num="16">        C.test1(&#34;Hello World!&#34;)</span>
+<span num="17">}</span>
+</pre>
+
+
+</div>
+
+      
+      <div class="pagenumber">[5]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cgo example 1 (compile)</h3>
+        
+  
+  <div class="code"><pre>$ go build
+
+./main.go:16: cannot use &#34;Hello World!&#34; (type string) as type *C.char in argument to _Cfunc_test1</pre></div>
+  
+
+      
+      <div class="pagenumber">[6]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cgo example 1 (CString)</h3>
+        
+  
+  <div class="code"><pre>// Go string to C string
+// The C string is allocated in the C heap using malloc.
+// It is the caller&#39;s responsibility to arrange for it to be
+// freed, such as by calling C.free (be sure to include stdlib.h
+// if C.free is needed).
+func C.CString(string) *C.char</pre></div>
+  
+<p class="link"><a href="https://golang.org/cmd/cgo/" target="_blank">golang.org/cmd/cgo/</a></p>
+      
+      <div class="pagenumber">[7]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cgo example 1 (fixed)</h3>
+        
+  <div class="code" contenteditable="true" spellcheck="false">
+
+
+<pre><span num="1">package main</span>
+<span num="2"></span>
+<span num="3">/*</span>
+<span num="4"></span>
+<span num="5">#include &lt;stdio.h&gt;</span>
+<span num="6"></span>
+<span num="7">void test1(char *text)</span>
+<span num="8">{</span>
+<span num="9">    printf(&#34;Native write: %s\n&#34;, text);</span>
+<span num="10">    <b>free(text);</b></span>
+<span num="11">}</span>
+<span num="12"></span>
+<span num="13">*/</span>
+<span num="14">import &#34;C&#34;</span>
+<span num="15"></span>
+<span num="16">func main() {</span>
+<span num="17">    <b>C.test1(C.CString(&#34;Hello World!&#34;))</b></span>
+<span num="18">}</span>
+</pre>
+
+
+</div>
+
+      
+      <div class="pagenumber">[8]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cgo example 1 (fixed - alt)</h3>
+        
+  <div class="code" contenteditable="true" spellcheck="false">
+
+
+<pre><span num="1">package main</span>
+<span num="2"></span>
+<span num="3">/*</span>
+<span num="4">#include &lt;stdio.h&gt;</span>
+<span num="5"><b>#include &lt;stdlib.h&gt;</b></span>
+<span num="6"></span>
+<span num="7">void test1(char *text)</span>
+<span num="8">{</span>
+<span num="9">    printf(&#34;Native write: %s\n&#34;, text);</span>
+<span num="10">}</span>
+<span num="11">*/</span>
+<span num="12">import &#34;C&#34;</span>
+<span num="13">import &#34;unsafe&#34;</span>
+<span num="14"></span>
+<span num="15">func main() {</span>
+<span num="16">    s := C.CString(&#34;Hello World!&#34;)</span>
+<span num="17">    <b>defer C.free(unsafe.Pointer(s))</b></span>
+<span num="18">    C.test1()</span>
+<span num="19">}</span>
+</pre>
+
+
+</div>
+
+      
+      <div class="pagenumber">[9]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>#cgo</h2>
+      
+      <div class="pagenumber">[10]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>#cgo</h3>
+        
+  
+  <p>
+    Setting flags in source file, because who needs Make.
+  </p>
+  
+
+  
+  <div class="code"><pre>// #cgo CFLAGS: -DPNG_DEBUG=1
+// #cgo amd64 386 CFLAGS: -DX86=1
+// #cgo LDFLAGS: -lpng
+// #include &lt;png.h&gt;
+import &#34;C&#34;</pre></div>
+  
+
+      
+      <div class="pagenumber">[11]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>#cgo pkg-config</h3>
+        
+  <div class="code" contenteditable="true" spellcheck="false">
+
+
+<pre><span num="1">prefix=/usr/local/whitedb</span>
+<span num="2">exec_prefix=${prefix}</span>
+<span num="3">datarootdir = ${prefix}/share</span>
+<span num="4">bindir=${exec_prefix}/bin</span>
+<span num="5">libdir=${exec_prefix}/lib</span>
+<span num="6">libexecdir=${exec_prefix}/libexec</span>
+<span num="7">includedir=${prefix}/include</span>
+<span num="8">datadir=${datarootdir}</span>
+<span num="9"></span>
+<span num="10">Name: WhiteDB</span>
+<span num="11">Description: In Memory Tuple Store</span>
+<span num="12">Version: 0.1.0</span>
+<span num="13">Libs: -L${libdir} -lwgdb</span>
+<span num="14">Libs.private:  </span>
+<span num="15">Cflags: -I${includedir}</span>
+</pre>
+
+
+</div>
+
+  
+  <div class="code"><pre>// #cgo pkg-config: whitedb
+import &#34;C&#34;</pre></div>
+  
+
+  
+  <p>
+    If needed:
+  </p>
+  
+
+  
+  <div class="code"><pre>PKG_CONFIG_PATH</pre></div>
+  
+
+      
+      <div class="pagenumber">[12]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Behind the scenes (Demo)</h2>
+      
+      <div class="pagenumber">[13]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Case 1: gopacket</h2>
+      
+      <div class="pagenumber">[14]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>gopacket</h3>
+        
+  
+  <p>
+    Packet decoding and manipulation from Google.
+  </p>
+  
+<p class="link"><a href="https://github.com/google/gopacket" target="_blank">github.com/google/gopacket</a></p>
+  
+  <p>
+    Challenge: Compile on Windows!
+  </p>
+  
+
+      
+      <div class="pagenumber">[15]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cgo on Windows, back in 2014</h3>
+        
+  <ul>
+  
+    <li>liteide <a href="https://github.com/visualfc/liteide" target="_blank">github.com/visualfc/liteide</a></li>
+  
+    <li>MinGW</li>
+  
+    <li>Absolute path horror...</li>
+  
+  </ul>
+
+  
+  <div class="code"><pre>/*
+#cgo linux LDFLAGS: -lpcap
+#cgo dragonfly LDFLAGS: -lpcap
+...
+#cgo windows,386 LDFLAGS: -L C:/WpdPack/Lib -lwpcap
+#cgo windows,amd64 LDFLAGS: -L C:/WpdPack/Lib/x64 -lwpcap
+#include &lt;stdlib.h&gt;
+...</pre></div>
+  
+
+  <ul>
+  
+    <li>Can we do it better in 2017?</li>
+  
+  </ul>
+
+      
+      <div class="pagenumber">[16]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Case 2: whitedb</h2>
+      
+      <div class="pagenumber">[17]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>whitedb</h3>
+        
+  
+  <p>
+    WhiteDB is a lightweight NoSQL database library written in C, operating fully in main memory. 
+  </p>
+  
+<p class="link"><a href="http://whitedb.org" target="_blank">whitedb.org</a></p>
+  
+  <p>
+    Challenge: Understand your memory. Working with memory allocated in C.
+  </p>
+  
+<p class="link"><a href="https://github.com/Kentik/gowhitedb" target="_blank">github.com/Kentik/gowhitedb</a></p>
+  
+  <p>
+    Whitedb exposes shared memory, Go runtime must not mess with it!
+  </p>
+  
+
+      
+      <div class="pagenumber">[18]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Exposing C memory</h3>
+        
+  
+  <p>
+    How to make a slice, from memory owned by C?
+  </p>
+  
+
+  <div class="code" contenteditable="true" spellcheck="false">
+
+
+<pre><span num="1">func (r *Record) GetBytesField(d *Db, number uint16) ([]byte, error) {</span>
+<span num="2">    if r.GetFieldType(d, number) != STRTYPE {</span>
+<span num="3">        return nil, WDBError(&#34;Not an string valued field&#34;)</span>
+<span num="4">    }</span>
+<span num="5"></span>
+<span num="6">    enc := C.wg_get_field(d.db, r.rec, C.wg_int(number))</span>
+<span num="7">    slen := int(C.wg_decode_str_len(d.db, enc))</span>
+<span num="8">    sval := C.wg_decode_str(d.db, enc)</span>
+<span num="9"></span>
+<span num="10">    <b>var goSlice []byte</b></span>
+<span num="11">    <b>sliceHeader := (*reflect.SliceHeader)((unsafe.Pointer(&amp;goSlice)))</b></span>
+<span num="12">    <b>sliceHeader.Cap = slen</b></span>
+<span num="13">    <b>sliceHeader.Len = slen</b></span>
+<span num="14">    <b>sliceHeader.Data = uintptr(unsafe.Pointer(sval))</b></span>
+<span num="15">    return goSlice, nil</span>
+<span num="16">}</span>
+</pre>
+
+
+</div>
+
+      
+      <div class="pagenumber">[19]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Exposing C memory</h3>
+        
+  
+  <p>
+    Another option
+  </p>
+  
+
+  
+  <div class="code"><pre>goSlice := (*[(1 &lt;&lt; 31) / unsafe.Sizeof(byte)]byte)(sval)[:len:len]</pre></div>
+  
+
+      
+      <div class="pagenumber">[20]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Case 3: Cross-Compiling</h2>
+      
+      <div class="pagenumber">[21]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>cgo cross compiling</h3>
+        
+  
+  <p>
+    Challenge: Cross compile, target box has no toolchain, don&#39;t loose all your hair!
+  </p>
+  
+
+  <ul>
+  
+    <li>For plain Go, easy as GOOS, GOARCH</li>
+  
+  </ul>
+
+  
+  <div class="code"><pre>GOARCH=arm go build
+
+GOOS=windows GOARCH=amd64 go build</pre></div>
+  
+
+  <ul>
+  
+    <li>For Cgo: CGO_ENABLED, cross-toolchain</li>
+  
+  </ul>
+
+      
+      <div class="pagenumber">[22]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cross Toolchain</h3>
+        
+  
+  <p>
+    Either install it (crossbuild-essential-arm64)
+  </p>
+  
+
+  
+  <p>
+    Or use docker! 
+  </p>
+  
+<p class="link"><a href="https://github.com/dockcross/dockcross" target="_blank">github.com/dockcross/dockcross</a></p>
+  
+  <div class="code"><pre>docker run --rm dockcross/linux-armv7 &gt; ./dockcross-linux-armv7
+chmod &#43;x ./dockcross-linux-armv7
+./dockcross-linux-armv7 bash -c &#39;$CC test/C/hello.c -o hello_arm&#39;</pre></div>
+  
+
+  
+  <p>
+    Issue: Dockcross has no Go!
+  </p>
+  
+
+      
+      <div class="pagenumber">[23]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Mount it with the code</h3>
+        
+  
+  <div class="code"><pre>~ - ws
+    |  
+    &#43;- go - bin
+    |
+    &#43;- gows - src - app - main.go</pre></div>
+  
+
+  
+  <p>
+    Dockcross mounts current dir.
+  </p>
+  
+
+  
+  <div class="code"><pre>cd ~/ws ; ./dockcross-linux-armv7 bash -c \
+   &#39;cd ws ; . gosetup.sh ; cd gows/src/app/ ; CGO_ENABLED=1 GOARCH=arm go install -x&#39;</pre></div>
+  
+
+  
+  <p>
+    Setup
+  </p>
+  
+
+  
+  <div class="code"><pre>export GOROOT=$PWD/go
+export PATH=$GOROOT/bin:$PATH
+export GOPATH=$PWD/gows</pre></div>
+  
+
+      
+      <div class="pagenumber">[24]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Dump</h2>
+      
+      <div class="pagenumber">[25]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Little hacks</h3>
+        
+  
+  <p>
+    Had ARM target, with <i>special</i> distribution.
+  </p>
+  
+
+  
+  <div class="code"><pre>$ ./example
+./example: No such file or directory</pre></div>
+  
+
+  
+  <p>
+    Why?
+  </p>
+  
+
+  
+  <div class="code"><pre>$ file example
+ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), 
+  dynamically linked, interpreter /lib/ld-linux-armhf.so.3</pre></div>
+  
+
+  
+  <p>
+    Target distribution has <code>/lib/ld-linux.so.3</code>
+  </p>
+  
+
+      
+      <div class="pagenumber">[26]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Little hacks (cont)</h3>
+        
+  
+  <p>
+    Handy LDFLAGS to override dl location.
+  </p>
+  
+
+  
+  <div class="code"><pre>#cgo LDFLAGS: -Wl,--dynamic-linker=/lib/ld-linux.so.3</pre></div>
+  
+
+  
+  <p>
+    But wait.. What about local compile?
+  </p>
+  
+
+  
+  <p>
+    Jsut use conditional compilation!
+  </p>
+  
+
+  
+  <div class="code"><pre>lib.go
+lib_arm.go &lt;-</pre></div>
+  
+
+      
+      <div class="pagenumber">[27]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Thinks to know</h3>
+        
+  
+  <p>
+    Passing memory to C.
+  </p>
+  
+
+  
+  <p>
+    Typical scenario: Here C, take this block and write to it.
+  </p>
+  
+
+  
+  <div class="code"><pre>buf := make([]byte, 1024)
+C.test1(unsafe.Pointer(&amp;buf[0]))</pre></div>
+  
+
+      
+      <div class="pagenumber">[28]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Quirks: Const nightmare</h3>
+        
+  
+  <p>
+    Does, and should not, expose anything.
+  </p>
+  
+
+  
+  <div class="code"><pre>const (
+    NULLTYPE       = C.WG_NULLTYPE
+    RECORDTYPE     = C.WG_RECORDTYPE
+    INTTYPE        = C.WG_INTTYPE
+    DOUBLETYPE     = C.WG_DOUBLETYPE
+...
+)</pre></div>
+  
+
+      
+      <div class="pagenumber">[29]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Quirks: Know your scheduler, know your objects</h3>
+        
+  <ul>
+  
+    <li>runtime.Gosched()</li>
+  
+  </ul>
+
+  <ul>
+  
+    <li>runtime.LockOSThread() </li>
+  
+  </ul>
+
+  <ul>
+  
+    <li>runtime.SetFinalizer()</li>
+  
+  </ul>
+
+      
+      <div class="pagenumber">[30]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Quirks: Structs</h3>
+        
+  <ul>
+  
+    <li>Problems with unions.</li>
+  
+  </ul>
+
+  <ul>
+  
+    <li>Alignment</li>
+  
+  </ul>
+
+      
+      <div class="pagenumber">[31]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Windows, can we do it better?</h2>
+      
+      <div class="pagenumber">[32]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h3>Cgo on Windows with WSL</h3>
+        
+  
+  <p>
+    Cross compiling for Windows on .. well.. Windows
+  </p>
+  
+
+  <ul>
+  
+    <li>sudo apt-get install mingw-w64</li>
+  
+    <li>CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows go build</li>
+  
+  </ul>
+
+      
+      <div class="pagenumber">[33]</div>
+      </article>
+  
+  
+  
+      <article>
+      
+        <h2>Questions</h2>
+      
+      <div class="pagenumber">[34]</div>
+      </article>
+  
+  
+
+      <article>
+        <h3>Thank you</h1>
+        
+          <div class="presenter">
+            
+  
+  <p>
+    Damjan Cvetko
+  </p>
+  
+
+  
+  <p>
+    Monotek d.o.o.
+  </p>
+  
+<p class="link"><a href="mailto:damjan.cvetko@monotek.net" target="_blank">damjan.cvetko@monotek.net</a></p><p class="link"><a href="http://twitter.com/damjancvetko" target="_blank">@damjancvetko</a></p><p class="link"><a href="https://github.com/zobo" target="_blank">https://github.com/zobo</a></p>
+          </div>
+        
+      </article>
+
+  </body>
+  
+</html>
