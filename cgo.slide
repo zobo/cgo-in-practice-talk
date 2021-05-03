@@ -1,0 +1,297 @@
+Cgo in practice
+Lightning talk at Ljubljana Golang Meetup: Goodbye Summer!
+28 Sep 2017
+Tags: cgo
+
+Damjan Cvetko
+Monotek d.o.o.
+damjan.cvetko@monotek.net
+@damjancvetko
+https://github.com/zobo
+
+* What is Cgo?
+
+Cgo lets Go packages call C code.
+
+Given a Go source file written with some special features, cgo outputs Go and C files that can be combined into a single Go package.
+
+From [[https://blog.golang.org/c-go-cgo]]
+
+* Why Cgo?
+
+- Too much code is already written. Reuse is critical.
+
+- Can't just port everything over night... Rome wasn't built in a day.
+
+- Isn't a Go program a binary executable? Why doesn't it just work?
+
+- Go != C
+
+: Argumen types
+: Return types
+: Calling and return conventions
+
+* Structure of Cgo file
+
+1. Ordinary `.go` file
+
+2. In comments add needed `#include` and `C` code
+
+3. Add `import` `"C"` directly after comment
+
+4. In go functions use pseudo package `C` to access C functions
+
+5. `go` `build`
+
+* Hello World
+
+* Cgo example 1
+
+.code sample1.go
+
+* Cgo example 1 (compile)
+
+ $ go build
+
+ ./main.go:16: cannot use "Hello World!" (type string) as type *C.char in argument to _Cfunc_test1
+
+* Cgo example 1 (CString)
+
+ // Go string to C string
+ // The C string is allocated in the C heap using malloc.
+ // It is the caller's responsibility to arrange for it to be
+ // freed, such as by calling C.free (be sure to include stdlib.h
+ // if C.free is needed).
+ func C.CString(string) *C.char
+
+.link https://golang.org/cmd/cgo/
+
+* Cgo example 1 (fixed)
+
+.code sample2.go
+
+* Cgo example 1 (fixed - alt)
+
+.code sample3.go
+
+* #cgo
+
+* #cgo
+
+Setting flags in source file, because who needs Make.
+
+ // #cgo CFLAGS: -DPNG_DEBUG=1
+ // #cgo amd64 386 CFLAGS: -DX86=1
+ // #cgo LDFLAGS: -lpng
+ // #include <png.h>
+ import "C"
+
+* #cgo pkg-config
+
+.code whitedb.po
+
+ // #cgo pkg-config: whitedb
+ import "C"
+
+If needed:
+
+ PKG_CONFIG_PATH
+
+
+* Behind the scenes (Demo)
+
+
+
+* Case 1: gopacket
+
+
+
+* gopacket
+
+Packet decoding and manipulation from Google.
+
+.link https://github.com/google/gopacket
+
+Challenge: Compile on Windows!
+
+* Cgo on Windows, back in 2014
+
+- liteide [[https://github.com/visualfc/liteide]]
+- MinGW
+- Absolute path horror...
+
+ /*
+ #cgo linux LDFLAGS: -lpcap
+ #cgo dragonfly LDFLAGS: -lpcap
+ ...
+ #cgo windows,386 LDFLAGS: -L C:/WpdPack/Lib -lwpcap
+ #cgo windows,amd64 LDFLAGS: -L C:/WpdPack/Lib/x64 -lwpcap
+ #include <stdlib.h>
+ ...
+
+- Can we do it better in 2017?
+
+
+
+
+* Case 2: whitedb
+
+
+
+* whitedb
+
+WhiteDB is a lightweight NoSQL database library written in C, operating fully in main memory. 
+
+.link http://whitedb.org
+
+Challenge: Understand your memory. Working with memory allocated in C.
+
+.link https://github.com/Kentik/gowhitedb
+
+Whitedb exposes shared memory, Go runtime must not mess with it!
+
+* Exposing C memory
+
+How to make a slice, from memory owned by C?
+
+.code whitedb1.go
+
+* Exposing C memory
+
+Another option
+
+   goSlice := (*[(1 << 31) / unsafe.Sizeof(byte)]byte)(sval)[:len:len]
+
+
+
+
+
+
+
+* Case 3: Cross-Compiling
+
+* cgo cross compiling
+
+Challenge: Cross compile, target box has no toolchain, don't loose all your hair!
+
+- For plain Go, easy as GOOS, GOARCH
+
+ GOARCH=arm go build
+
+ GOOS=windows GOARCH=amd64 go build
+
+- For Cgo: CGO_ENABLED, cross-toolchain
+
+* Cross Toolchain
+
+Either install it (crossbuild-essential-arm64)
+
+Or use docker! 
+
+.link https://github.com/dockcross/dockcross
+
+ docker run --rm dockcross/linux-armv7 > ./dockcross-linux-armv7
+ chmod +x ./dockcross-linux-armv7
+ ./dockcross-linux-armv7 bash -c '$CC test/C/hello.c -o hello_arm'
+
+Issue: Dockcross has no Go!
+
+* Mount it with the code
+
+  ~ - ws
+      |  
+      +- go - bin
+      |
+      +- gows - src - app - main.go
+
+
+Dockcross mounts current dir.
+
+ cd ~/ws ; ./dockcross-linux-armv7 bash -c \
+    'cd ws ; . gosetup.sh ; cd gows/src/app/ ; CGO_ENABLED=1 GOARCH=arm go install -x'
+
+Setup
+
+ export GOROOT=$PWD/go
+ export PATH=$GOROOT/bin:$PATH
+ export GOPATH=$PWD/gows
+
+* Dump
+
+* Little hacks
+
+Had ARM target, with _special_ distribution.
+
+ $ ./example
+ ./example: No such file or directory
+
+Why?
+
+ $ file example
+ ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), 
+   dynamically linked, interpreter /lib/ld-linux-armhf.so.3
+
+Target distribution has `/lib/ld-linux.so.3`
+
+* Little hacks (cont)
+
+Handy LDFLAGS to override dl location.
+
+ #cgo LDFLAGS: -Wl,--dynamic-linker=/lib/ld-linux.so.3
+
+But wait.. What about local compile?
+
+Jsut use conditional compilation!
+
+ lib.go
+ lib_arm.go <- 
+
+* Thinks to know
+
+Passing memory to C.
+
+Typical scenario: Here C, take this block and write to it.
+
+ buf := make([]byte, 1024)
+ C.test1(unsafe.Pointer(&buf[0]))
+
+* Quirks: Const nightmare
+
+Does, and should not, expose anything.
+
+ const (
+ 	NULLTYPE       = C.WG_NULLTYPE
+ 	RECORDTYPE     = C.WG_RECORDTYPE
+ 	INTTYPE        = C.WG_INTTYPE
+ 	DOUBLETYPE     = C.WG_DOUBLETYPE
+ ...
+ )
+
+* Quirks: Know your scheduler, know your objects
+
+
+- runtime.Gosched()
+
+- runtime.LockOSThread() 
+
+- runtime.SetFinalizer()
+
+* Quirks: Structs
+
+- Problems with unions.
+
+- Alignment
+
+
+* Windows, can we do it better?
+
+* Cgo on Windows with WSL
+
+Cross compiling for Windows on .. well.. Windows
+
+- sudo apt-get install mingw-w64
+- CC=x86_64-w64-mingw32-gcc CGO_ENABLED=1 GOOS=windows go build
+
+
+* Questions
+
